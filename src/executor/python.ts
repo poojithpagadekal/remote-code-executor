@@ -70,11 +70,37 @@ async function runInContainer(
   );
 
   await container.start();
-  const result = await container.wait();
+  try {
+    const result = await Promise.race([
+      container.wait(),
+      withTimeout(container, 10000),
+    ]);
 
-  return {
-    stdout: stdout.trim(),
-    stderr: stderr.trim(),
-    exitCode: result.StatusCode,
-  };
+    return {
+      stdout: stdout.trim(),
+      stderr: stderr.trim(),
+      exitCode: result.StatusCode,
+    };
+  } catch (err: any) {
+    if (err.message === "Time limit exceeded") {
+      return {
+        stdout: stdout.trim(),
+        stderr: "Time limit exceeded",
+        exitCode: -1,
+      };
+    }
+    throw err;
+  }
+}
+
+function withTimeout(
+  container: Docker.Container,
+  timeoutMs: number,
+): Promise<never> {
+  return new Promise((_, reject) => {
+    setTimeout(async () => {
+      await container.kill().catch(() => {});
+      reject(new Error("Time limit exceeded"));
+    }, timeoutMs);
+  });
 }
