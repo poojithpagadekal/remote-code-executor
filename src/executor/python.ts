@@ -9,6 +9,7 @@ export interface ExecutionResult {
   stdout: string;
   stderr: string;
   exitCode: number;
+  status: "success" | "error" | "timeout";
   executionTime: number;
 }
 
@@ -21,8 +22,10 @@ export async function runPython(code: string): Promise<ExecutionResult> {
 
   try {
     const result = await runInContainer(filepath, filename);
+    const status = getStatus(result.exitCode);
     return {
       ...result,
+      status,
       executionTime: Date.now() - startTime,
     };
   } finally {
@@ -33,7 +36,7 @@ export async function runPython(code: string): Promise<ExecutionResult> {
 async function runInContainer(
   filepath: string,
   filename: string,
-): Promise<Omit<ExecutionResult, "executionTime">> {
+): Promise<Omit<ExecutionResult, "executionTime" | "status">> {
   const container = await docker.createContainer({
     Image: "python:3.11-slim",
     Cmd: ["python", `/code/${filename}`],
@@ -103,4 +106,14 @@ function withTimeout(
       reject(new Error("Time limit exceeded"));
     }, timeoutMs);
   });
+}
+
+function getStatus(exitCode: number): "success" | "error" | "timeout" {
+  if (exitCode === 0) {
+    return "success";
+  } else if (exitCode == -1) {
+    return "timeout";
+  } else {
+    return "error";
+  }
 }
