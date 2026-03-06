@@ -3,6 +3,8 @@ import { executeCode } from "../executor/index";
 
 const router = Router();
 
+const SUPPORTED_LANGUAGES = ["python", "cpp"];
+
 router.post("/execute", async (req: Request, res: Response) => {
   const { language, code } = req.body;
 
@@ -23,10 +25,10 @@ router.post("/execute", async (req: Request, res: Response) => {
       error: "Max length of the code can be 10000 charecters",
     });
   }
-  if (trimmedLanguage !== "python") {
+  if (!SUPPORTED_LANGUAGES.includes(trimmedLanguage)) {
     return res
       .status(400)
-      .json({ error: `Language '${language}' is not supported yet` });
+      .json({ error: `Language '${trimmedLanguage}' is not supported yet` });
   }
 
   try {

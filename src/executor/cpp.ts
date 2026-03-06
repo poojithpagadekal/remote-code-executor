@@ -1,13 +1,13 @@
 import Docker from "dockerode";
 import { v4 as uuidv4 } from "uuid";
-import { ExecutionResult } from "../types";
 import fs from "fs/promises";
 import path from "path";
+import { ExecutionResult } from "../types";
 
 const docker = new Docker();
 
-export async function runPython(code: string): Promise<ExecutionResult> {
-  const filename = `${uuidv4()}.py`;
+export async function runCpp(code: string): Promise<ExecutionResult> {
+  const filename = `${uuidv4()}.cpp`;
   const filepath = path.join(process.cwd(), "temp", filename);
   const startTime = Date.now();
 
@@ -15,7 +15,7 @@ export async function runPython(code: string): Promise<ExecutionResult> {
 
   try {
     const result = await runInContainer(filepath, filename);
-    const status = getStatus(result.exitCode);
+    const status = getStatus(result.exitCode, result.stage);
     return {
       ...result,
       status,
@@ -26,19 +26,31 @@ export async function runPython(code: string): Promise<ExecutionResult> {
   }
 }
 
+interface RawContainerResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  stage: "compile" | "run";
+}
+
 async function runInContainer(
   filepath: string,
   filename: string,
-): Promise<Omit<ExecutionResult, "executionTime" | "status">> {
+): Promise<RawContainerResult> {
+  const sourceFile = `/code/${filename}`;
+  const outputFile = `/code/output`;
+  const compileCmd = `g++ ${sourceFile} -o ${outputFile}`;
+  const runCmd = outputFile;
+
   const container = await docker.createContainer({
-    Image: "python:3.11-slim",
-    Cmd: ["python", `/code/${filename}`],
+    Image: "gcc:latest",
+    Cmd: ["sh", "-c", `${compileCmd}&& ${runCmd}`],
     HostConfig: {
       Mounts: [
         {
           Type: "bind",
           Source: filepath.replace(/\\/g, "/"),
-          Target: `/code/${filename}`,
+          Target: sourceFile,
           ReadOnly: true,
         },
       ],
@@ -61,32 +73,55 @@ async function runInContainer(
 
   container.modem.demuxStream(
     stream,
-    { write: (chunk: Buffer) => (stdout += chunk.toString()) },
-    { write: (chunk: Buffer) => (stderr += chunk.toString()) },
+    {
+      write: (chunk: Buffer) =>
+        (stdout += Buffer.isBuffer(chunk)
+          ? chunk.toString("utf-8")
+          : String(chunk)),
+    },
+    {
+      write: (chunk: Buffer) =>
+        (stderr += Buffer.isBuffer(chunk)
+          ? chunk.toString("utf-8")
+          : String(chunk)),
+    },
   );
 
   await container.start();
+
   try {
     const result = await Promise.race([
       container.wait(),
       withTimeout(container, 10000),
     ]);
 
+    const stage = isCompileError(stderr, result.StatusCode) ? "compile" : "run";
+
     return {
       stdout: stdout.trim(),
       stderr: stderr.trim(),
       exitCode: result.StatusCode,
+      stage,
     };
-  } catch (err: any) {
-    if (err.message === "Time limit exceeded") {
+  } catch (error: any) {
+    if (error.message === "Time limit exceeded") {
       return {
         stdout: stdout.trim(),
         stderr: "Time limit exceeded",
         exitCode: -1,
+        stage: "run",
       };
     }
-    throw err;
+    throw error;
   }
+}
+
+function isCompileError(stderr: string, exitCode: number): boolean {
+  if (exitCode === 0) return false;
+  return (
+    stderr.includes("error:") ||
+    (stderr.includes("warning:") && stderr.includes("error:"))
+  );
 }
 
 function withTimeout(
@@ -101,12 +136,12 @@ function withTimeout(
   });
 }
 
-function getStatus(exitCode: number): "success" | "runtime_error" | "timeout" {
-  if (exitCode === 0) {
-    return "success";
-  } else if (exitCode == -1) {
-    return "timeout";
-  } else {
-    return "runtime_error";
-  }
+function getStatus(
+  exitCode: number,
+  stage: "compile" | "run",
+): ExecutionResult["status"] {
+  if (exitCode === -1) return "timeout";
+  if (exitCode === 0) return "success";
+  if (stage === "compile") return "compile_error";
+  return "runtime_error";
 }
