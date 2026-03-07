@@ -1,5 +1,4 @@
 import { Router, Request, Response } from "express";
-import { executeCode } from "../executor/index";
 import executionQueue from "../queue/executionQueue";
 
 const router = Router();
