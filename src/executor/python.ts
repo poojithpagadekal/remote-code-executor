@@ -10,7 +10,7 @@ export async function runPython(code: string): Promise<ExecutionResult> {
   const filename = `${uuidv4()}.py`;
   const filepath = path.join(process.cwd(), "temp", filename);
   const startTime = Date.now();
-
+  await fs.mkdir(path.join(process.cwd(), "temp"), { recursive: true });
   await fs.writeFile(filepath, code);
 
   try {
@@ -30,6 +30,8 @@ async function runInContainer(
   filepath: string,
   filename: string,
 ): Promise<Omit<ExecutionResult, "executionTime" | "status">> {
+  const hostTempPath =
+    process.env.HOST_TEMP_PATH || path.join(process.cwd(), "temp");
   const container = await docker.createContainer({
     Image: "python:3.11-slim",
     Cmd: ["python", `/code/${filename}`],
@@ -37,7 +39,7 @@ async function runInContainer(
       Mounts: [
         {
           Type: "bind",
-          Source: filepath.replace(/\\/g, "/"),
+          Source: path.join(hostTempPath, filename).replace(/\\/g, "/"),
           Target: `/code/${filename}`,
           ReadOnly: true,
         },

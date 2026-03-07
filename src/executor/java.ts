@@ -16,7 +16,7 @@ export async function runJava(code: string): Promise<ExecutionResult> {
   await fs.writeFile(filepath, code);
 
   try {
-    const result = await runInContainer(dirpath);
+    const result = await runInContainer(dirId);
     const status = getStatus(result.exitCode, result.stage);
 
     return {
@@ -25,6 +25,7 @@ export async function runJava(code: string): Promise<ExecutionResult> {
       executionTime: Date.now() - startTime,
     };
   } finally {
+    await new Promise((resolve) => setTimeout(resolve, 500));
     await fs.rm(dirpath, { recursive: true, force: true });
   }
 }
@@ -36,13 +37,17 @@ interface RawContainerResult {
   stage: "compile" | "run";
 }
 
-async function runInContainer(dirpath: string): Promise<RawContainerResult> {
+async function runInContainer(dirId: string): Promise<RawContainerResult> {
   const sourceFile = "/code/Main.java";
   const classPath = "/code";
   const className = "Main";
 
   const compileCmd = `javac ${sourceFile}`;
   const runCmd = `java -cp ${classPath} ${className}`;
+
+  const hostTempPath =
+    process.env.HOST_TEMP_PATH || path.join(process.cwd(), "temp");
+  const sourcePath = `${hostTempPath}/${dirId}`;
 
   const container = await docker.createContainer({
     Image: "eclipse-temurin:21-jdk-jammy",
@@ -51,7 +56,7 @@ async function runInContainer(dirpath: string): Promise<RawContainerResult> {
       Mounts: [
         {
           Type: "bind",
-          Source: dirpath.replace(/\\/g, "/"),
+          Source: sourcePath,
           Target: "/code",
           ReadOnly: false,
         },

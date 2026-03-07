@@ -11,6 +11,7 @@ export async function runCpp(code: string): Promise<ExecutionResult> {
   const filepath = path.join(process.cwd(), "temp", filename);
   const startTime = Date.now();
 
+  await fs.mkdir(path.join(process.cwd(), "temp"), { recursive: true });
   await fs.writeFile(filepath, code);
 
   try {
@@ -42,6 +43,9 @@ async function runInContainer(
   const compileCmd = `g++ ${sourceFile} -o ${outputFile}`;
   const runCmd = outputFile;
 
+  const hostTempPath =
+    process.env.HOST_TEMP_PATH || path.join(process.cwd(), "temp");
+
   const container = await docker.createContainer({
     Image: "gcc:latest",
     Cmd: ["sh", "-c", `${compileCmd}&& ${runCmd}`],
@@ -49,7 +53,7 @@ async function runInContainer(
       Mounts: [
         {
           Type: "bind",
-          Source: filepath.replace(/\\/g, "/"),
+          Source: path.join(hostTempPath, filename).replace(/\\/g, "/"),
           Target: sourceFile,
           ReadOnly: true,
         },
