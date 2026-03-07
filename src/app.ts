@@ -1,5 +1,6 @@
 import express, { Application, Request, Response } from "express";
 import executeRoute from "./routes/execute";
+import "./queue/worker"
 const app: Application = express();
 
 app.use(express.json());
