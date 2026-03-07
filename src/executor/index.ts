@@ -1,6 +1,7 @@
 import { runCpp } from "./cpp";
 import { runPython } from "./python";
 import { ExecutionResult } from "../types";
+import { runJava } from "./java";
 
 export async function executeCode(
   language: string,
@@ -11,6 +12,8 @@ export async function executeCode(
       return await runPython(code);
     case "cpp":
       return await runCpp(code);
+    case "java":
+      return await runJava(code);
     default:
       throw new Error(`Language ${language} is not supported`);
   }

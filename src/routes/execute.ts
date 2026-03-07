@@ -3,7 +3,7 @@ import { executeCode } from "../executor/index";
 
 const router = Router();
 
-const SUPPORTED_LANGUAGES = ["python", "cpp"];
+const SUPPORTED_LANGUAGES = ["python", "cpp","java"];
 
 router.post("/execute", async (req: Request, res: Response) => {
   const { language, code } = req.body;
