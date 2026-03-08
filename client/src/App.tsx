@@ -29,13 +29,17 @@ int main() {
 function App() {
   const [language, setLanguage] = useState("python");
   const [code, setCode] = useState(DEFAULT_CODE["python"]);
+  const [codeMap, setCodeMap] = useState<Record<string, string>>({
+    ...DEFAULT_CODE,
+  });
   const [result, setResult] = useState<ExecutionResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleLanguageChange = (lang: string) => {
+    setCodeMap((prev) => ({ ...prev, [language]: code }));
     setLanguage(lang);
-    setCode(DEFAULT_CODE[lang]);
+    setCode(codeMap[lang]);
     setResult(null);
     setError("");
   };
