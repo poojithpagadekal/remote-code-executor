@@ -4,27 +4,28 @@ import fs from "fs/promises";
 import path from "path";
 import { ENV } from "../config/env";
 import { ExecutionResult } from "../types";
+import { EXECUTION_TIMEOUT_MS, MAX_MEMORY_BYTES } from "../config/constants";
 
 const docker = new Docker();
 
-export async function runJava(code: string): Promise<ExecutionResult> {
+export async function runJava(
+  code: string,
+  stdin: string = "",
+): Promise<ExecutionResult> {
   const dirId = uuidv4();
   const dirpath = path.join(process.cwd(), "temp", dirId);
   const filepath = path.join(dirpath, "Main.java");
+  const stdinFilepath = path.join(dirpath, "stdin.txt");
   const startTime = Date.now();
 
   await fs.mkdir(dirpath);
   await fs.writeFile(filepath, code);
+  await fs.writeFile(stdinFilepath, stdin);
 
   try {
     const result = await runInContainer(dirId);
     const status = getStatus(result.exitCode, result.stage);
-
-    return {
-      ...result,
-      status,
-      executionTime: Date.now() - startTime,
-    };
+    return { ...result, status, executionTime: Date.now() - startTime };
   } finally {
     await new Promise((resolve) => setTimeout(resolve, 500));
     await fs.rm(dirpath, { recursive: true, force: true });
@@ -42,12 +43,12 @@ async function runInContainer(dirId: string): Promise<RawContainerResult> {
   const sourceFile = "/code/Main.java";
   const classPath = "/code";
   const className = "Main";
+  const stdinFile = "/code/stdin.txt";
 
   const compileCmd = `javac ${sourceFile}`;
-  const runCmd = `java -cp ${classPath} ${className}`;
+  const runCmd = `java -cp ${classPath} ${className} < ${stdinFile}`;
 
-  const hostTempPath =
-   ENV.HOST_TEMP_PATH || path.join(process.cwd(), "temp");
+  const hostTempPath = ENV.HOST_TEMP_PATH || path.join(process.cwd(), "temp");
   const sourcePath = `${hostTempPath}/${dirId}`;
 
   const container = await docker.createContainer({
@@ -62,7 +63,7 @@ async function runInContainer(dirId: string): Promise<RawContainerResult> {
           ReadOnly: false,
         },
       ],
-      Memory: 128 * 1024 * 1024,
+      Memory: MAX_MEMORY_BYTES,
       NetworkMode: "none",
       AutoRemove: true,
     },
@@ -84,13 +85,13 @@ async function runInContainer(dirId: string): Promise<RawContainerResult> {
     {
       write: (chunk: Buffer) =>
         (stdout += Buffer.isBuffer(chunk)
-          ? chunk.toString("utf-8")
+          ? chunk.toString("utf8")
           : String(chunk)),
     },
     {
       write: (chunk: Buffer) =>
         (stderr += Buffer.isBuffer(chunk)
-          ? chunk.toString("utf-8")
+          ? chunk.toString("utf8")
           : String(chunk)),
     },
   );
@@ -100,7 +101,7 @@ async function runInContainer(dirId: string): Promise<RawContainerResult> {
   try {
     const result = await Promise.race([
       container.wait(),
-      withTimeout(container, 10000),
+      withTimeout(container, EXECUTION_TIMEOUT_MS),
     ]);
 
     const stage = isCompileError(stderr, result.StatusCode) ? "compile" : "run";

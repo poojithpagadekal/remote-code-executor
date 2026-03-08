@@ -6,7 +6,7 @@ const router = Router();
 const SUPPORTED_LANGUAGES = ["python", "cpp", "java"];
 
 router.post("/execute", async (req: Request, res: Response) => {
-  const { language, code } = req.body;
+  const { language, code,stdin } = req.body;
 
   if (typeof language !== "string" || typeof code !== "string") {
     return res.status(400).json({
@@ -16,6 +16,7 @@ router.post("/execute", async (req: Request, res: Response) => {
 
   const trimmedLanguage = language.trim();
   const trimmedCode = code.trim();
+  const trimmedStdin = stdin.trim();
 
   if (trimmedLanguage === "" || trimmedCode === "") {
     return res.status(400).json({ error: "language and code are required" });
@@ -39,6 +40,7 @@ router.post("/execute", async (req: Request, res: Response) => {
     const job = await executionQueue.add({
       language: trimmedLanguage,
       code: trimmedCode,
+      stdin:trimmedStdin,
     });
     const result = await job.finished();
     res.status(200).json(result);

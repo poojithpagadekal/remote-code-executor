@@ -1,11 +1,11 @@
 import executionQueue from "./executionQueue";
-import { executeCode } from "../executor";
+import { executeCode } from "../executor/index";
 
 const MAX_CONCURRENT_JOBS = 5;
 
 executionQueue.process(MAX_CONCURRENT_JOBS, async (job) => {
-  const { language, code } = job.data;
-  const result = await executeCode(language, code);
+  const { language, code, stdin } = job.data;
+  const result = await executeCode(language, code, stdin);
   return result;
 });
 

@@ -4,27 +4,31 @@ import fs from "fs/promises";
 import path from "path";
 import { ENV } from "../config/env";
 import { ExecutionResult } from "../types";
+import { EXECUTION_TIMEOUT_MS, MAX_MEMORY_BYTES } from "../config/constants";
 
 const docker = new Docker();
 
-export async function runCpp(code: string): Promise<ExecutionResult> {
+export async function runCpp(
+  code: string,
+  stdin: string = "",
+): Promise<ExecutionResult> {
   const filename = `${uuidv4()}.cpp`;
+  const stdinFilename = filename.replace(".cpp", ".stdin");
   const filepath = path.join(process.cwd(), "temp", filename);
+  const stdinFilepath = path.join(process.cwd(), "temp", stdinFilename);
   const startTime = Date.now();
 
   await fs.mkdir(path.join(process.cwd(), "temp"), { recursive: true });
   await fs.writeFile(filepath, code);
+  await fs.writeFile(stdinFilepath, stdin);
 
   try {
-    const result = await runInContainer(filepath, filename);
+    const result = await runInContainer(filename, stdinFilename);
     const status = getStatus(result.exitCode, result.stage);
-    return {
-      ...result,
-      status,
-      executionTime: Date.now() - startTime,
-    };
+    return { ...result, status, executionTime: Date.now() - startTime };
   } finally {
     await fs.unlink(filepath).catch(() => {});
+    await fs.unlink(stdinFilepath).catch(() => {});
   }
 }
 
@@ -36,20 +40,20 @@ interface RawContainerResult {
 }
 
 async function runInContainer(
-  filepath: string,
   filename: string,
+  stdinFilename: string,
 ): Promise<RawContainerResult> {
   const sourceFile = `/code/${filename}`;
   const outputFile = `/code/output`;
+  const stdinFile = `/code/${stdinFilename}`;
   const compileCmd = `g++ ${sourceFile} -o ${outputFile}`;
-  const runCmd = outputFile;
+  const runCmd = `${outputFile} < ${stdinFile}`;
 
-  const hostTempPath =
-    ENV.HOST_TEMP_PATH || path.join(process.cwd(), "temp");
+  const hostTempPath = ENV.HOST_TEMP_PATH || path.join(process.cwd(), "temp");
 
   const container = await docker.createContainer({
     Image: "gcc:latest",
-    Cmd: ["sh", "-c", `${compileCmd}&& ${runCmd}`],
+    Cmd: ["sh", "-c", `${compileCmd} && ${runCmd}`],
     HostConfig: {
       Mounts: [
         {
@@ -58,8 +62,14 @@ async function runInContainer(
           Target: sourceFile,
           ReadOnly: true,
         },
+        {
+          Type: "bind",
+          Source: path.join(hostTempPath, stdinFilename).replace(/\\/g, "/"),
+          Target: stdinFile,
+          ReadOnly: true,
+        },
       ],
-      Memory: 128 * 1024 * 1024,
+      Memory: MAX_MEMORY_BYTES,
       NetworkMode: "none",
       AutoRemove: true,
     },
@@ -81,13 +91,13 @@ async function runInContainer(
     {
       write: (chunk: Buffer) =>
         (stdout += Buffer.isBuffer(chunk)
-          ? chunk.toString("utf-8")
+          ? chunk.toString("utf8")
           : String(chunk)),
     },
     {
       write: (chunk: Buffer) =>
         (stderr += Buffer.isBuffer(chunk)
-          ? chunk.toString("utf-8")
+          ? chunk.toString("utf8")
           : String(chunk)),
     },
   );
@@ -97,7 +107,7 @@ async function runInContainer(
   try {
     const result = await Promise.race([
       container.wait(),
-      withTimeout(container, 10000),
+      withTimeout(container, EXECUTION_TIMEOUT_MS),
     ]);
 
     const stage = isCompileError(stderr, result.StatusCode) ? "compile" : "run";

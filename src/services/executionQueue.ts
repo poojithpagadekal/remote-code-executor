@@ -4,6 +4,7 @@ import { ENV } from "../config/env";
 export interface ExecutionJob {
   language: string;
   code: string;
+  stdin: string;
 }
 
 const executionQueue = new Bull<ExecutionJob>("execution", {

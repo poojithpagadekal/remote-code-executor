@@ -1,6 +1,7 @@
 import express, { Application, Request, Response } from "express";
 import executeRoute from "./routes/execute";
 import cors from "cors";
+import "./services/worker"
 import ratelimit from "express-rate-limit";
 import { errorHandler } from "./middleware/errorHandler";
 const app: Application = express();
@@ -19,8 +20,8 @@ app.use(
 app.get("/", (req: Request, res: Response) => {
   return res.json({ status: "ok", message: "Remote Code Executor is running" });
 });
-
-app.use("/api", executeRoute,limiter);
+app.use(limiter);
+app.use("/api", executeRoute);
 app.use(errorHandler);
 
 export default app;
