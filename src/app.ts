@@ -1,27 +1,25 @@
 import express, { Application, Request, Response } from "express";
-import executeRoute from "./routes/execute";
 import cors from "cors";
-import "./services/worker"
 import ratelimit from "express-rate-limit";
 import { errorHandler } from "./middleware/errorHandler";
+import "./modules/execution/execution.worker";
+import executeRoute from "./modules/execution/execution.routes";
+import historyRoute from "./modules/history/history.routes";
+
 const app: Application = express();
 
+const limiter = ratelimit({ windowMs: 60 * 1000, max: 30 });
+
+app.use(limiter);
 app.use(express.json());
-const limiter = ratelimit({
-  windowMs: 60 * 1000,
-  max: 30,
-});
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-  }),
-);
+app.use(cors({ origin: "http://localhost:5174" }));
 
 app.get("/", (req: Request, res: Response) => {
-  return res.json({ status: "ok", message: "Remote Code Executor is running" });
+  res.json({ status: "ok", message: "Remote Code Executor is running" });
 });
-app.use(limiter);
+
 app.use("/api", executeRoute);
+app.use("/api", historyRoute);
 app.use(errorHandler);
 
 export default app;

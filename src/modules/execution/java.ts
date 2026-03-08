@@ -1,59 +1,65 @@
 import Docker from "dockerode";
 import { v4 as uuidv4 } from "uuid";
-import { ExecutionResult } from "../types";
-import { EXECUTION_TIMEOUT_MS, MAX_MEMORY_BYTES } from "../config/constants";
+import { ExecutionResult } from "../../types";
+import { EXECUTION_TIMEOUT_MS, MAX_MEMORY_BYTES } from "../../config/constants";
 import fs from "fs/promises";
 import path from "path";
-import { ENV } from "../config/env";
-
+import { ENV } from "../../config/env";
 const docker = new Docker();
 
-export async function runPython(
+export async function runJava(
   code: string,
   stdin: string = "",
 ): Promise<ExecutionResult> {
-  const filename = `${uuidv4()}.py`;
-  const stdinFilename = filename.replace(".py", ".stdin");
-  const filepath = path.join(process.cwd(), "temp", filename);
-  const stdinFilepath = path.join(process.cwd(), "temp", stdinFilename);
+  const dirId = uuidv4();
+  const dirpath = path.join(process.cwd(), "temp", dirId);
+  const filepath = path.join(dirpath, "Main.java");
+  const stdinFilepath = path.join(dirpath, "stdin.txt");
   const startTime = Date.now();
 
-  await fs.mkdir(path.join(process.cwd(), "temp"), { recursive: true });
+  await fs.mkdir(dirpath);
   await fs.writeFile(filepath, code);
   await fs.writeFile(stdinFilepath, stdin);
 
   try {
-    const result = await runInContainer(filename, stdinFilename);
-    const status = getStatus(result.exitCode);
+    const result = await runInContainer(dirId);
+    const status = getStatus(result.exitCode, result.stage);
     return { ...result, status, executionTime: Date.now() - startTime };
   } finally {
-    await fs.unlink(filepath).catch(() => {});
-    await fs.unlink(stdinFilepath).catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await fs.rm(dirpath, { recursive: true, force: true });
   }
 }
 
-async function runInContainer(
-  filename: string,
-  stdinFilename: string,
-): Promise<Omit<ExecutionResult, "executionTime" | "status">> {
+interface RawContainerResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  stage: "compile" | "run";
+}
+
+async function runInContainer(dirId: string): Promise<RawContainerResult> {
+  const sourceFile = "/code/Main.java";
+  const classPath = "/code";
+  const className = "Main";
+  const stdinFile = "/code/stdin.txt";
+
+  const compileCmd = `javac ${sourceFile}`;
+  const runCmd = `java -cp ${classPath} ${className} < ${stdinFile}`;
+
   const hostTempPath = ENV.HOST_TEMP_PATH || path.join(process.cwd(), "temp");
+  const sourcePath = `${hostTempPath}/${dirId}`;
 
   const container = await docker.createContainer({
-    Image: "python:3.11-slim",
-    Cmd: ["sh", "-c", `python /code/${filename} < /code/${stdinFilename}`],
+    Image: "eclipse-temurin:21-jdk-jammy",
+    Cmd: ["sh", "-c", `${compileCmd} && ${runCmd}`],
     HostConfig: {
       Mounts: [
         {
           Type: "bind",
-          Source: path.join(hostTempPath, filename).replace(/\\/g, "/"),
-          Target: `/code/${filename}`,
-          ReadOnly: true,
-        },
-        {
-          Type: "bind",
-          Source: path.join(hostTempPath, stdinFilename).replace(/\\/g, "/"),
-          Target: `/code/${stdinFilename}`,
-          ReadOnly: true,
+          Source: sourcePath,
+          Target: "/code",
+          ReadOnly: false,
         },
       ],
       Memory: MAX_MEMORY_BYTES,
@@ -97,21 +103,33 @@ async function runInContainer(
       withTimeout(container, EXECUTION_TIMEOUT_MS),
     ]);
 
+    const stage = isCompileError(stderr, result.StatusCode) ? "compile" : "run";
+
     return {
       stdout: stdout.trim(),
       stderr: stderr.trim(),
       exitCode: result.StatusCode,
+      stage,
     };
-  } catch (err: any) {
-    if (err.message === "Time limit exceeded") {
+  } catch (error: any) {
+    if (error.message === "Time limit exceeded") {
       return {
         stdout: stdout.trim(),
         stderr: "Time limit exceeded",
         exitCode: -1,
+        stage: "run",
       };
     }
-    throw err;
+    throw error;
   }
+}
+
+function isCompileError(stderr: string, StatusCode: number): boolean {
+  if (StatusCode === 0) return false;
+  return (
+    stderr.includes("error") ||
+    (stderr.includes("warning") && stderr.includes("error"))
+  );
 }
 
 function withTimeout(
@@ -126,8 +144,12 @@ function withTimeout(
   });
 }
 
-function getStatus(exitCode: number): "success" | "runtime_error" | "timeout" {
-  if (exitCode === 0) return "success";
+function getStatus(
+  exitCode: number,
+  stage: "compile" | "run",
+): ExecutionResult["status"] {
   if (exitCode === -1) return "timeout";
+  if (exitCode === 0) return "success";
+  if (stage === "compile") return "compile_error";
   return "runtime_error";
 }

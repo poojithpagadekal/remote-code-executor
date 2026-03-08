@@ -1,7 +1,7 @@
 import { runCpp } from "./cpp";
 import { runPython } from "./python";
-import { ExecutionResult } from "../types";
 import { runJava } from "./java";
+import { ExecutionResult } from "../../types";
 
 export async function executeCode(
   language: string,

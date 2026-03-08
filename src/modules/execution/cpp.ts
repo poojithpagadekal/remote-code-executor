@@ -1,34 +1,33 @@
 import Docker from "dockerode";
 import { v4 as uuidv4 } from "uuid";
+import { ExecutionResult } from "../../types";
+import { EXECUTION_TIMEOUT_MS, MAX_MEMORY_BYTES } from "../../config/constants";
 import fs from "fs/promises";
 import path from "path";
-import { ENV } from "../config/env";
-import { ExecutionResult } from "../types";
-import { EXECUTION_TIMEOUT_MS, MAX_MEMORY_BYTES } from "../config/constants";
-
+import { ENV } from "../../config/env";
 const docker = new Docker();
 
-export async function runJava(
+export async function runCpp(
   code: string,
   stdin: string = "",
 ): Promise<ExecutionResult> {
-  const dirId = uuidv4();
-  const dirpath = path.join(process.cwd(), "temp", dirId);
-  const filepath = path.join(dirpath, "Main.java");
-  const stdinFilepath = path.join(dirpath, "stdin.txt");
+  const filename = `${uuidv4()}.cpp`;
+  const stdinFilename = filename.replace(".cpp", ".stdin");
+  const filepath = path.join(process.cwd(), "temp", filename);
+  const stdinFilepath = path.join(process.cwd(), "temp", stdinFilename);
   const startTime = Date.now();
 
-  await fs.mkdir(dirpath);
+  await fs.mkdir(path.join(process.cwd(), "temp"), { recursive: true });
   await fs.writeFile(filepath, code);
   await fs.writeFile(stdinFilepath, stdin);
 
   try {
-    const result = await runInContainer(dirId);
+    const result = await runInContainer(filename, stdinFilename);
     const status = getStatus(result.exitCode, result.stage);
     return { ...result, status, executionTime: Date.now() - startTime };
   } finally {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    await fs.rm(dirpath, { recursive: true, force: true });
+    await fs.unlink(filepath).catch(() => {});
+    await fs.unlink(stdinFilepath).catch(() => {});
   }
 }
 
@@ -39,28 +38,34 @@ interface RawContainerResult {
   stage: "compile" | "run";
 }
 
-async function runInContainer(dirId: string): Promise<RawContainerResult> {
-  const sourceFile = "/code/Main.java";
-  const classPath = "/code";
-  const className = "Main";
-  const stdinFile = "/code/stdin.txt";
-
-  const compileCmd = `javac ${sourceFile}`;
-  const runCmd = `java -cp ${classPath} ${className} < ${stdinFile}`;
+async function runInContainer(
+  filename: string,
+  stdinFilename: string,
+): Promise<RawContainerResult> {
+  const sourceFile = `/code/${filename}`;
+  const outputFile = `/code/output`;
+  const stdinFile = `/code/${stdinFilename}`;
+  const compileCmd = `g++ ${sourceFile} -o ${outputFile}`;
+  const runCmd = `${outputFile} < ${stdinFile}`;
 
   const hostTempPath = ENV.HOST_TEMP_PATH || path.join(process.cwd(), "temp");
-  const sourcePath = `${hostTempPath}/${dirId}`;
 
   const container = await docker.createContainer({
-    Image: "eclipse-temurin:21-jdk-jammy",
+    Image: "gcc:latest",
     Cmd: ["sh", "-c", `${compileCmd} && ${runCmd}`],
     HostConfig: {
       Mounts: [
         {
           Type: "bind",
-          Source: sourcePath,
-          Target: "/code",
-          ReadOnly: false,
+          Source: path.join(hostTempPath, filename).replace(/\\/g, "/"),
+          Target: sourceFile,
+          ReadOnly: true,
+        },
+        {
+          Type: "bind",
+          Source: path.join(hostTempPath, stdinFilename).replace(/\\/g, "/"),
+          Target: stdinFile,
+          ReadOnly: true,
         },
       ],
       Memory: MAX_MEMORY_BYTES,
@@ -125,11 +130,11 @@ async function runInContainer(dirId: string): Promise<RawContainerResult> {
   }
 }
 
-function isCompileError(stderr: string, StatusCode: number): boolean {
-  if (StatusCode === 0) return false;
+function isCompileError(stderr: string, exitCode: number): boolean {
+  if (exitCode === 0) return false;
   return (
-    stderr.includes("error") ||
-    (stderr.includes("warning") && stderr.includes("error"))
+    stderr.includes("error:") ||
+    (stderr.includes("warning:") && stderr.includes("error:"))
   );
 }
 

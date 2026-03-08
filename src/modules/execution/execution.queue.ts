@@ -1,5 +1,5 @@
 import Bull from "bull";
-import { ENV } from "../config/env";
+import { ENV } from "../../config/env";
 
 export interface ExecutionJob {
   language: string;

@@ -1,7 +1,6 @@
-import executionQueue from "./executionQueue";
-import { executeCode } from "../executor/index";
-
-const MAX_CONCURRENT_JOBS = 5;
+import executionQueue from "./execution.queue";
+import { executeCode } from "./execution.service";
+import { MAX_CONCURRENT_JOBS } from "../../config/constants";
 
 executionQueue.process(MAX_CONCURRENT_JOBS, async (job) => {
   const { language, code, stdin } = job.data;
