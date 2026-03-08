@@ -1,5 +1,5 @@
 import Bull from "bull";
-import { ExecutionResult } from "../types";
+import { ENV } from "../config/env";
 
 export interface ExecutionJob {
   language: string;
@@ -7,7 +7,7 @@ export interface ExecutionJob {
 }
 
 const executionQueue = new Bull<ExecutionJob>("execution", {
-  redis: process.env.REDIS_URL || "redis://localhost:6379",
+  redis: ENV.REDIS_URL,
 });
 
 export default executionQueue;

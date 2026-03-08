@@ -2,6 +2,7 @@ import Docker from "dockerode";
 import { v4 as uuidv4 } from "uuid";
 import fs from "fs/promises";
 import path from "path";
+import { ENV } from "../config/env";
 import { ExecutionResult } from "../types";
 
 const docker = new Docker();
@@ -46,7 +47,7 @@ async function runInContainer(dirId: string): Promise<RawContainerResult> {
   const runCmd = `java -cp ${classPath} ${className}`;
 
   const hostTempPath =
-    process.env.HOST_TEMP_PATH || path.join(process.cwd(), "temp");
+   ENV.HOST_TEMP_PATH || path.join(process.cwd(), "temp");
   const sourcePath = `${hostTempPath}/${dirId}`;
 
   const container = await docker.createContainer({

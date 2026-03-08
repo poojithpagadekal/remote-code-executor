@@ -1,8 +1,8 @@
 import express, { Application, Request, Response } from "express";
 import executeRoute from "./routes/execute";
-import "./queue/worker";
 import cors from "cors";
 import ratelimit from "express-rate-limit";
+import { errorHandler } from "./middleware/errorHandler";
 const app: Application = express();
 
 app.use(express.json());
@@ -21,5 +21,6 @@ app.get("/", (req: Request, res: Response) => {
 });
 
 app.use("/api", executeRoute,limiter);
+app.use(errorHandler);
 
 export default app;

@@ -1,8 +1,10 @@
 import Docker from "dockerode";
 import { v4 as uuidv4 } from "uuid";
 import { ExecutionResult } from "../types";
+import { EXECUTION_TIMEOUT_MS,MAX_MEMORY_BYTES } from "../config/constants";
 import fs from "fs/promises";
 import path from "path";
+import { ENV } from "../config/env";
 
 const docker = new Docker();
 
@@ -30,8 +32,7 @@ async function runInContainer(
   filepath: string,
   filename: string,
 ): Promise<Omit<ExecutionResult, "executionTime" | "status">> {
-  const hostTempPath =
-    process.env.HOST_TEMP_PATH || path.join(process.cwd(), "temp");
+  const hostTempPath = ENV.HOST_TEMP_PATH || path.join(process.cwd(), "temp");
   const container = await docker.createContainer({
     Image: "python:3.11-slim",
     Cmd: ["python", `/code/${filename}`],
@@ -44,7 +45,7 @@ async function runInContainer(
           ReadOnly: true,
         },
       ],
-      Memory: 128 * 1024 * 1024,
+      Memory: MAX_MEMORY_BYTES,
       NetworkMode: "none",
       AutoRemove: true,
     },
@@ -71,7 +72,7 @@ async function runInContainer(
   try {
     const result = await Promise.race([
       container.wait(),
-      withTimeout(container, 10000),
+      withTimeout(container, EXECUTION_TIMEOUT_MS),
     ]);
 
     return {

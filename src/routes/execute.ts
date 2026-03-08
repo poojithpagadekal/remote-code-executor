@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
-import executionQueue from "../queue/executionQueue";
-
+import executionQueue from "../services/executionQueue";
+import logger from "../config/logger";
 const router = Router();
 
 const SUPPORTED_LANGUAGES = ["python", "cpp", "java"];
@@ -32,13 +32,26 @@ router.post("/execute", async (req: Request, res: Response) => {
   }
 
   try {
+    logger.info(
+      { language: trimmedLanguage, codeLength: trimmedCode.length },
+      "Execution request received",
+    );
     const job = await executionQueue.add({
       language: trimmedLanguage,
       code: trimmedCode,
     });
     const result = await job.finished();
     res.status(200).json(result);
+    logger.info(
+      {
+        language: trimmedLanguage,
+        status: result.status,
+        executionTime: result.executionTime,
+      },
+      "Execution completed",
+    );
   } catch (error: any) {
+    logger.error({ error: error.message }, "Execution failed");
     res.status(500).json({ error: error.message });
   }
 });
