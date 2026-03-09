@@ -13,8 +13,7 @@ const limiter = ratelimit({ windowMs: 60 * 1000, max: 30 });
 
 app.use(limiter);
 app.use(express.json());
-// app.ts
-cors({ origin: ENV.CORS_ORIGIN || "http://localhost:5173" });
+app.use(cors({ origin: ENV.CORS_ORIGIN || "http://localhost:5173" }));
 app.get("/", (req: Request, res: Response) => {
   res.json({ status: "ok", message: "Remote Code Executor is running" });
 });
