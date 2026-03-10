@@ -3,263 +3,237 @@ import { useParams } from "react-router-dom";
 import { Editor } from "@monaco-editor/react";
 import axios from "axios";
 
-interface ExecutionRecord {
+interface SharedExecution {
   id: string;
   language: string;
   code: string;
-  stdin: string;
   stdout: string;
   stderr: string;
   status: string;
-  exitCode: number;
   executionTime: number;
-  createdAt: string;
 }
 
-const STATUS_STYLES: Record<
-  string,
-  { bg: string; text: string; border: string; dot: string }
-> = {
-  success: {
-    dot: "bg-green-400",
-    bg: "rgba(16,185,129,0.08)",
-    text: "#10b981",
-    border: "rgba(16,185,129,0.25)",
-  },
-  compile_error: {
-    dot: "bg-yellow-400",
-    bg: "rgba(234,179,8,0.08)",
-    text: "#eab308",
-    border: "rgba(234,179,8,0.25)",
-  },
-  runtime_error: {
-    dot: "bg-red-400",
-    bg: "rgba(239,68,68,0.08)",
-    text: "#ef4444",
-    border: "rgba(239,68,68,0.25)",
-  },
-  timeout: {
-    dot: "bg-orange-400",
-    bg: "rgba(249,115,22,0.08)",
-    text: "#f97316",
-    border: "rgba(249,115,22,0.25)",
-  },
+const STATUS_STYLES: Record<string, { dot: string; bg: string; text: string; border: string }> = {
+  success:       { dot: "#629755", bg: "#62975511", text: "#629755", border: "#62975544" },
+  compile_error: { dot: "#bbb529", bg: "#bbb52911", text: "#bbb529", border: "#bbb52944" },
+  runtime_error: { dot: "#bc3f3c", bg: "#bc3f3c11", text: "#bc3f3c", border: "#bc3f3c44" },
+  timeout:       { dot: "#cc7832", bg: "#cc783211", text: "#cc7832", border: "#cc783244" },
 };
+
+function getExtension(language: string) {
+  if (language === "cpp") return "cpp";
+  if (language === "java") return "java";
+  return "py";
+}
 
 export default function SharePage() {
   const { id } = useParams<{ id: string }>();
-  const [record, setRecord] = useState<ExecutionRecord | null>(null);
+  const [execution, setExecution] = useState<SharedExecution | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     axios
       .get(`http://localhost:3000/api/executions/${id}`)
-      .then((res) => setRecord(res.data))
-      .catch(() => setError("Execution not found or expired"))
+      .then((res) => setExecution(res.data))
+      .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading)
+  if (loading) {
     return (
       <div
         className="h-screen flex items-center justify-center"
-        style={{ backgroundColor: "#1a1b2e" }}
+        style={{ backgroundColor: "#2b2b2b" }}
       >
-        <div
-          className="flex items-center gap-2 text-xs"
-          style={{ color: "#64748b" }}
-        >
+        <div className="flex items-center gap-3">
           <span
-            className="w-3 h-3 border rounded-full animate-spin"
-            style={{ borderColor: "#263859", borderTopColor: "#00d4ff" }}
+            className="w-4 h-4 border-2 rounded-full animate-spin"
+            style={{ borderColor: "#515151", borderTopColor: "#4a9eda" }}
           />
-          Loading...
+          <span className="text-sm" style={{ color: "#a9b7c6", fontFamily: "'JetBrains Mono', monospace" }}>
+            Loading execution...
+          </span>
         </div>
       </div>
     );
+  }
 
-  if (error || !record)
+  if (notFound || !execution) {
     return (
       <div
-        className="h-screen flex items-center justify-center"
-        style={{ backgroundColor: "#1a1b2e" }}
+        className="h-screen flex flex-col items-center justify-center gap-3"
+        style={{ backgroundColor: "#2b2b2b" }}
       >
-        <p className="text-xs" style={{ color: "#ef4444" }}>
-          {error || "Not found"}
+        <span className="text-4xl" style={{ color: "#515151" }}>✕</span>
+        <p className="text-sm" style={{ color: "#a9b7c6", fontFamily: "'JetBrains Mono', monospace" }}>
+          Execution not found or expired
         </p>
+        <p className="text-xs" style={{ color: "#6d7374" }}>
+          Shared executions expire after 7 days
+        </p>
+        <a
+          href="/"
+          className="mt-2 text-xs px-4 py-2 rounded transition-colors"
+          style={{ backgroundColor: "#4a9eda22", border: "1px solid #4a9eda44", color: "#4a9eda" }}
+        >
+          Open CodeRun
+        </a>
       </div>
     );
+  }
 
-  const s = STATUS_STYLES[record.status] || STATUS_STYLES["runtime_error"];
+  const s = STATUS_STYLES[execution.status] || STATUS_STYLES["runtime_error"];
+  const ext = getExtension(execution.language);
 
   return (
     <div
       className="h-screen flex flex-col overflow-hidden"
-      style={{
-        backgroundColor: "#1a1b2e",
-        fontFamily: "'JetBrains Mono', monospace",
-      }}
+      style={{ backgroundColor: "#2b2b2b", fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}
     >
       <nav
-        className="flex-none h-12 flex items-center justify-between px-5"
-        style={{
-          backgroundColor: "#16213e",
-          borderBottom: "1px solid #263859",
-        }}
+        className="flex-none h-11 flex items-center justify-between px-4"
+        style={{ backgroundColor: "#1e1f22", borderBottom: "1px solid #515151" }}
       >
         <div className="flex items-center gap-3">
           <div
-            className="w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-bold text-black"
-            style={{ backgroundColor: "#00d4ff" }}
+            className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold"
+            style={{ backgroundColor: "#4a9eda", color: "#1e1f22" }}
           >
             {"</>"}
           </div>
-          <span className="text-sm font-bold" style={{ color: "#e2e8f0" }}>
+          <span className="text-sm font-bold" style={{ color: "#cdd6f4" }}>
             CodeRun
           </span>
-          <div className="w-px h-4" style={{ backgroundColor: "#263859" }} />
-          <span
-            className="px-2.5 py-1 rounded text-xs font-medium"
-            style={{
-              backgroundColor: "rgba(0,212,255,0.1)",
-              color: "#00d4ff",
-              border: "1px solid rgba(0,212,255,0.2)",
-            }}
-          >
-            {record.language}
+          <div className="w-px h-4" style={{ backgroundColor: "#515151" }} />
+          <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: "#4a9eda22", color: "#4a9eda", border: "1px solid #4a9eda44" }}>
+            {execution.language}
           </span>
         </div>
+
         <div className="flex items-center gap-3">
-          <span className="text-xs" style={{ color: "#374151" }}>
-            {new Date(record.createdAt).toLocaleString()}
-          </span>
-          <span
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-            style={{
-              backgroundColor: s.bg,
-              border: `1px solid ${s.border}`,
-              color: s.text,
-            }}
+          <div
+            className="inline-flex items-center gap-2 px-2.5 py-1 rounded text-xs font-medium"
+            style={{ backgroundColor: s.bg, border: `1px solid ${s.border}`, color: s.text }}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-            {record.status.replace(/_/g, " ").toUpperCase()}
-          </span>
-          <span className="text-xs" style={{ color: "#374151" }}>
-            ⏱ {record.executionTime}ms
+            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.dot }} />
+            {execution.status.replace(/_/g, " ").toUpperCase()}
+          </div>
+          <span className="text-xs" style={{ color: "#6d7374" }}>
+            ⚡ {execution.executionTime} ms
           </span>
         </div>
+
+        <a
+          href="/"
+          className="text-xs px-3 py-1.5 rounded transition-colors"
+          style={{ backgroundColor: "#629755", color: "#fff", fontWeight: 600 }}
+        >
+          Open Editor
+        </a>
       </nav>
 
       <div className="flex flex-1 overflow-hidden">
-        <div
-          className="flex flex-col"
-          style={{ width: "70%", borderRight: "1px solid #263859" }}
-        >
+
+        <div className="flex flex-col" style={{ width: "65%", borderRight: "1px solid #515151" }}>
           <div
-            className="flex-none h-9 flex items-center px-4"
-            style={{
-              backgroundColor: "#16213e",
-              borderBottom: "1px solid #263859",
-            }}
+            className="flex-none h-9 flex items-center"
+            style={{ backgroundColor: "#2b2b2b", borderBottom: "1px solid #515151" }}
           >
-            <span className="text-xs" style={{ color: "#64748b" }}>
-              main.
-              {record.language === "cpp"
-                ? "cpp"
-                : record.language === "java"
-                  ? "java"
-                  : "py"}
-            </span>
-            <span
-              className="ml-2 text-[10px] px-1.5 py-0.5 rounded"
-              style={{ backgroundColor: "#263859", color: "#64748b" }}
+            <div
+              className="h-full flex items-center px-4 gap-2 text-xs border-r"
+              style={{ backgroundColor: "#3c3f41", borderColor: "#515151", color: "#cdd6f4" }}
             >
-              read only
-            </span>
+              <span style={{ color: "#4a9eda", fontSize: "10px", fontWeight: 600 }}>
+                {execution.language === "java" ? "J" : execution.language === "cpp" ? "C" : "P"}
+              </span>
+              main.{ext}
+              <span
+                className="ml-1 text-[10px] px-1.5 py-0.5 rounded"
+                style={{ backgroundColor: "#6d737422", color: "#6d7374", border: "1px solid #51515144" }}
+              >
+                read only
+              </span>
+            </div>
           </div>
-          <div className="flex-1">
+          <div className="flex-1 overflow-hidden">
             <Editor
               height="100%"
-              language={record.language}
-              value={record.code}
+              language={execution.language}
+              value={execution.code}
               theme="vs-dark"
               options={{
+                readOnly: true,
                 fontSize: 13,
                 minimap: { enabled: false },
-                readOnly: true,
                 scrollBeyondLastLine: false,
-                padding: { top: 12 },
-                fontFamily: "'JetBrains Mono', monospace",
+                padding: { top: 16, bottom: 12 },
+                fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
                 fontLigatures: true,
+                lineNumbers: "on",
+                renderLineHighlight: "line",
+                cursorStyle: "line",
               }}
             />
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-4 space-y-4">
-          {record.stdin && (
-            <div className="space-y-1.5">
-              <p
-                className="text-[10px] uppercase tracking-widest"
-                style={{ color: "#374151" }}
-              >
-                stdin
-              </p>
-              <pre
-                className="rounded-lg p-3 text-xs whitespace-pre-wrap"
-                style={{
-                  backgroundColor: "#16213e",
-                  border: "1px solid #263859",
-                  color: "#94a3b8",
-                }}
-              >
-                {record.stdin}
-              </pre>
-            </div>
-          )}
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <div
+            className="flex-none h-9 flex items-center px-4"
+            style={{ backgroundColor: "#3c3f41", borderBottom: "1px solid #515151" }}
+          >
+            <span className="text-xs font-medium" style={{ color: "#cdd6f4" }}>Output</span>
+          </div>
 
-          {record.stdout && (
-            <div className="space-y-1.5">
-              <p
-                className="text-[10px] uppercase tracking-widest"
-                style={{ color: "#374151" }}
-              >
-                stdout
-              </p>
-              <pre
-                className="rounded-lg p-3 text-xs whitespace-pre-wrap"
-                style={{
-                  backgroundColor: "#16213e",
-                  border: "1px solid #263859",
-                  color: "#10b981",
-                }}
-              >
-                {record.stdout}
-              </pre>
-            </div>
-          )}
+          <div className="flex-1 overflow-auto p-4 space-y-3">
+            {execution.stdout && (
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-widest font-medium" style={{ color: "#a9b7c6" }}>
+                  stdout
+                </p>
+                <pre
+                  className="rounded p-3 text-xs whitespace-pre-wrap overflow-auto"
+                  style={{
+                    backgroundColor: "#313335",
+                    border: "1px solid #515151",
+                    color: "#cdd6f4",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    maxHeight: "300px",
+                  }}
+                >
+                  {execution.stdout}
+                </pre>
+              </div>
+            )}
 
-          {record.stderr && (
-            <div className="space-y-1.5">
-              <p
-                className="text-[10px] uppercase tracking-widest"
-                style={{ color: "#374151" }}
-              >
-                stderr
-              </p>
-              <pre
-                className="rounded-lg p-3 text-xs whitespace-pre-wrap"
-                style={{
-                  backgroundColor: "#16213e",
-                  border: "1px solid rgba(239,68,68,0.2)",
-                  color: "#ef4444",
-                }}
-              >
-                {record.stderr}
-              </pre>
-            </div>
-          )}
+            {execution.stderr && (
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-widest font-medium" style={{ color: "#a9b7c6" }}>
+                  stderr
+                </p>
+                <pre
+                  className="rounded p-3 text-xs whitespace-pre-wrap overflow-auto"
+                  style={{
+                    backgroundColor: "#313335",
+                    border: "1px solid #bc3f3c44",
+                    color: "#bc3f3c",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    maxHeight: "300px",
+                  }}
+                >
+                  {execution.stderr}
+                </pre>
+              </div>
+            )}
+
+            {!execution.stdout && !execution.stderr && (
+              <div className="flex flex-col items-center justify-center h-full gap-2">
+                <span style={{ color: "#515151", fontSize: "24px" }}>▶</span>
+                <span className="text-xs" style={{ color: "#a9b7c6" }}>No output</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
