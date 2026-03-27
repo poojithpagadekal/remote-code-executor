@@ -144,18 +144,18 @@ GET /api/executions/:id   # Single execution by ID
 
 ```
                         ┌─────────────────────────────────┐
-                        │           React Frontend         │
-                        │   Monaco Editor + Test Cases     │
+                        │           React Frontend        │
+                        │   Monaco Editor + Test Cases    │
                         └──────────────┬──────────────────┘
                                        │ HTTP POST /api/execute
                         ┌──────────────▼──────────────────┐
-                        │        Express API Server        │
-                        │   Rate Limiting + Validation     │
+                        │        Express API Server       │
+                        │   Rate Limiting + Validation    │
                         └──────────────┬──────────────────┘
                                        │
                         ┌──────────────▼──────────────────┐
-                        │         Bull Job Queue           │
-                        │     Max 5 Concurrent Jobs        │
+                        │         Bull Job Queue          │
+                        │     Max 5 Concurrent Jobs       │
                         └──────────────┬──────────────────┘
                                        │
                    ┌───────────────────┼───────────────────┐
@@ -166,8 +166,8 @@ GET /api/executions/:id   # Single execution by ID
         └───────────────────┘ └─────────────────┘ └──────────────────┘
                                        │
                         ┌──────────────▼──────────────────┐
-                        │              Redis               │
-                        │   Job Queue + Execution History  │
+                        │              Redis              │
+                        │   Job Queue + Execution History │
                         └─────────────────────────────────┘
 ```
 
