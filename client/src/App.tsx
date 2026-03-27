@@ -3,8 +3,6 @@ import { useState } from "react";
 import SharePage from "./pages/SharePage";
 import Header from "./components/header";
 import EditorPanel from "./components/EditorPanel";
-import OutputPanel from "./components/output";
-import TestCasesPanel from "./components/testcases";
 import StdinPanel from "./components/StdinPanel";
 import BottomPanel from "./components/BottomPanel";
 import { useCodeEditor } from "./hooks/useCodeEditor";
