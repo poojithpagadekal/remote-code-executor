@@ -3,7 +3,7 @@ import logger from "../config/logger";
 
 export function errorHandler(
   err: Error,
-  req: Request,
+  _req: Request,
   res: Response,
   next: NextFunction,
 ): void {

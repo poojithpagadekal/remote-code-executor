@@ -3,7 +3,7 @@ import { getExecution, getExecutions } from "./history.service";
 import logger from "../../config/logger";
 
 export async function listExecutions(
-  req: Request,
+  _req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
