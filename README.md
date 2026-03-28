@@ -1,6 +1,6 @@
 # CodeRun — Sandboxed Remote Code Execution Engine
 
-Safely runs untrusted code inside isolated Docker containers. Supports Python, C++, and Java with asynchronous job processing, test case validation, and shareable execution links.
+Safely runs untrusted code inside isolated Docker containers. Supports Python, C++, and Java with asynchronous job processing and test case validation.
 
 ---
 
@@ -32,7 +32,7 @@ print(n * 2)
 - **Stdin support** — works with `input()` / `cin` / `Scanner`
 - **Test case runner** — run N inputs in parallel, get pass/fail per case
 - **Execution history** — last 20 runs stored in Redis, 7-day TTL
-- **Shareable links** — any execution shareable via `/s/:id`
+- **Execution permalinks (local-only)** — each run generates a unique `/s/:id` link for replay on the same machine
 - **Rate limiting** — 30 requests/min per IP
 - **Real-time status** — pulsing indicator while code runs
 
@@ -144,18 +144,18 @@ GET /api/executions/:id   # Single execution by ID
 
 ```
                         ┌─────────────────────────────────┐
-                        │           React Frontend        │
-                        │   Monaco Editor + Test Cases    │
+                        │           React Frontend         │
+                        │   Monaco Editor + Test Cases     │
                         └──────────────┬──────────────────┘
                                        │ HTTP POST /api/execute
                         ┌──────────────▼──────────────────┐
-                        │        Express API Server       │
-                        │   Rate Limiting + Validation    │
+                        │        Express API Server        │
+                        │   Rate Limiting + Validation     │
                         └──────────────┬──────────────────┘
                                        │
                         ┌──────────────▼──────────────────┐
-                        │         Bull Job Queue          │
-                        │     Max 5 Concurrent Jobs       │
+                        │         Bull Job Queue           │
+                        │     Max 5 Concurrent Jobs        │
                         └──────────────┬──────────────────┘
                                        │
                    ┌───────────────────┼───────────────────┐
@@ -166,8 +166,8 @@ GET /api/executions/:id   # Single execution by ID
         └───────────────────┘ └─────────────────┘ └──────────────────┘
                                        │
                         ┌──────────────▼──────────────────┐
-                        │              Redis              │
-                        │   Job Queue + Execution History │
+                        │              Redis               │
+                        │   Job Queue + Execution History  │
                         └─────────────────────────────────┘
 ```
 
