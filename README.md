@@ -1,6 +1,6 @@
 # CodeRun — Sandboxed Remote Code Execution Engine
 
-A production-grade code execution engine that safely runs untrusted code inside isolated Docker containers. Supports Python, C++, and Java with asynchronous job processing, test case validation, and shareable execution links.
+A secure, sandboxed remote code execution engine built with Docker, BullMQ, and Redis. Supports Python, C++, and Java with asynchronous job processing, test case validation, and shareable execution links.
 
 ---
 
@@ -22,12 +22,15 @@ print(n * 2)
 ## Screenshots
 
 ### Editor + Execution
+
 ![Editor](docs/editor.png)
 
 ### Test Case Runner
+
 ![Test cases](docs/testcases.png)
 
 ### Share Page
+
 ![Share page](docs/share.png)
 
 ---
@@ -46,12 +49,12 @@ print(n * 2)
                         └──────────────┬──────────────────┘
                                        │
                         ┌──────────────▼──────────────────┐
-                        │         Bull Job Queue           │
-                        │     Max 5 Concurrent Jobs        │
-                        └──────────────┬──────────────────┘
-                                       │
-                   ┌───────────────────┼───────────────────┐
-                   │                   │                   │
+                        │          Bull Job Queue          │◄──────┐
+                        │      Max 5 Concurrent Jobs       │        │
+                        └──────────────┬──────────────────┘        │
+                                       │                     stores queue
+                   ┌───────────────────┼───────────────────┐        │
+                   │                   │                   │        │
         ┌──────────▼────────┐ ┌────────▼────────┐ ┌───────▼──────────┐
         │   Python Worker   │ │   C++ Worker    │ │   Java Worker    │
         │ python:3.11-slim  │ │  gcc:latest     │ │ eclipse-temurin  │
@@ -59,10 +62,13 @@ print(n * 2)
         └───────────────────┘ └─────────────────┘ └──────────────────┘
                                        │
                         ┌──────────────▼──────────────────┐
-                        │              Redis               │
-                        │   Job Queue + Execution History  │
-                        └─────────────────────────────────┘
+                        │              Redis                │
+                        │  Backs Bull's queue + stores      │
+                        │  execution history (7-day TTL)    │
+                        └──────────────────────────────────┘
 ```
+
+Note: Redis isn't a separate downstream stage — it's the storage layer Bull uses to persist the queue itself, and it's reused for execution history so no second data store is needed.
 
 ---
 
@@ -91,47 +97,53 @@ Every code submission follows this exact path:
 ## Key Design Decisions
 
 ### Why Docker for sandboxing?
+
 Each code submission runs in an isolated Docker container with strict resource limits. This prevents:
-- **Filesystem access** — container has a read-only bind mount, no host access
+
+- **Writes to the host filesystem** — the container gets a read-only bind mount of the submission files; it has its own internal filesystem but cannot touch the host's
 - **Memory bombs** — each container is capped at 128MB RAM
 - **Network attacks** — containers run with `NetworkMode: none`
 - **Infinite loops** — containers are killed after 10 seconds with `SIGKILL`
 
 ### Why Bull + Redis for the queue?
+
 Direct execution would allow unlimited concurrent containers, crashing the server under load. Bull provides:
+
 - **Controlled concurrency** — max 5 containers running simultaneously
 - **Job persistence** — if the server crashes, queued jobs survive in Redis
 - **Backpressure** — excess requests queue in Redis instead of being dropped
 
 ### Why file-based stdin?
-Passing stdin through Docker's attach stream API is unreliable on Windows due to stream multiplexing behaviour. Writing stdin to a `.stdin` temp file on the host, bind-mounting it into the container read-only, and redirecting with `< stdin.txt` in the shell command works consistently across all platforms — the same pattern used by production online judges.
+
+Passing stdin through Docker's attach stream API is unreliable on Windows due to stream multiplexing behaviour. Writing stdin to a `.stdin` temp file on the host, bind-mounting it into the container read-only, and redirecting with `< stdin.txt` in the shell command works consistently across all platforms. This approach is commonly used by online judge systems because it avoids shell interpolation entirely.
 
 ### Why Redis for execution history?
+
 Redis is already running for Bull. Reusing it for history means no additional infrastructure. A 7-day TTL means stale records expire automatically with no cleanup code. The history list is capped at 20 entries using `LTRIM` to keep memory bounded.
 
 ---
 
 ## Performance
 
-Typical execution latency breakdown:
+Typical execution latency breakdown, measured on my development machine (Docker Desktop, Windows):
 
-| Stage | Time |
-|---|---|
-| API validation + queue dispatch | ~10ms |
-| Worker pickup from Redis | ~5ms |
-| Temp file write | ~5ms |
-| Docker container startup | ~500–900ms |
-| Code execution | ~5–50ms |
-| Result capture + cleanup | ~50ms |
-| **Total (observed p95)** | **~838ms** |
+| Stage                           | Time       |
+| ------------------------------- | ---------- |
+| API validation + queue dispatch | ~10ms      |
+| Worker pickup from Redis        | ~5ms       |
+| Temp file write                 | ~5ms       |
+| Docker container startup        | ~500–900ms |
+| Code execution                  | ~5–50ms    |
+| Result capture + cleanup        | ~50ms      |
+| **Total (observed p95)**        | **~838ms** |
 
-The dominant cost is Docker container cold start. See [Known Limitations](#known-limitations) for context.
+The dominant cost is Docker container cold start. Numbers will vary on native Linux or a cloud VM, since Docker Desktop on Windows/WSL adds overhead that a bare-metal Linux host wouldn't have. See [Known Limitations](#known-limitations) for context.
 
 ---
 
 ## Load Testing
 
-Load tests were run using [k6](https://k6.io) against the `/api/execute` endpoint. All tests ran against the full stack locally via `docker-compose up`.
+Load tests were run using [k6](https://k6.io) against the `/api/execute` endpoint. All tests ran against the full stack locally via `docker-compose up`, on my development machine — these aren't production or cloud benchmarks.
 
 ### Test 1 — Sustained load (5 VUs, 30 seconds)
 
@@ -173,7 +185,7 @@ http_req_duration:
 http_reqs: 15 completed, 5 interrupted (test ended before queue drained)
 ```
 
-20 simultaneous requests hit a queue capped at 5 concurrent jobs. Requests beyond the concurrency limit queued in Bull and were processed in batches — no requests dropped, no server errors. The high average latency reflects queue wait time, not execution time. The 5 interrupted iterations were still in queue when the 10s test window closed.
+20 simultaneous requests hit a queue capped at 5 concurrent jobs. Requests beyond the concurrency limit queued in Bull and were processed in batches — all accepted requests that completed returned successfully, with no server errors. The high average latency reflects queue wait time, not execution time. The 5 interrupted iterations were still in queue when the 10s test window closed, so their outcome wasn't captured by this run.
 
 ---
 
@@ -230,15 +242,15 @@ k6 run --vus 5 --duration 15s load-test.js   # timeout (change code to while Tru
 
 ## Tech Stack
 
-| Layer | Technology | Why |
-|---|---|---|
-| Frontend | React + Vite + TypeScript | Fast dev server, full type safety |
-| Editor | Monaco Editor | Same engine as VS Code |
-| Backend | Node.js + Express + TypeScript | Great Docker SDK support |
-| Queue | Bull + Redis | Job persistence, concurrency control |
-| Sandboxing | Docker | Process isolation, resource limits |
-| Logging | Pino | Structured JSON logs, minimal overhead |
-| Styling | Tailwind CSS | Utility-first, consistent design system |
+| Layer      | Technology                     | Why                                     |
+| ---------- | ------------------------------ | --------------------------------------- |
+| Frontend   | React + Vite + TypeScript      | Fast dev server, full type safety       |
+| Editor     | Monaco Editor                  | Same engine as VS Code                  |
+| Backend    | Node.js + Express + TypeScript | Great Docker SDK support                |
+| Queue      | Bull + Redis                   | Job persistence, concurrency control    |
+| Sandboxing | Docker                         | Process isolation, resource limits      |
+| Logging    | Pino                           | Structured JSON logs, minimal overhead  |
+| Styling    | Tailwind CSS                   | Utility-first, consistent design system |
 
 ---
 
@@ -266,6 +278,7 @@ remote-code-executor/
 ## Getting Started
 
 ### Prerequisites
+
 - Docker Desktop (running)
 - Node.js 18+
 
@@ -282,10 +295,10 @@ docker-compose up --build
 
 All three services start with one command.
 
-| Service | URL |
-|---|---|
+| Service  | URL                   |
+| -------- | --------------------- |
 | Frontend | http://localhost:5173 |
-| API | http://localhost:3000 |
+| API      | http://localhost:3000 |
 
 ### Running manually (for frontend hot reload during development)
 
@@ -325,6 +338,7 @@ POST /api/execute
 ```
 
 **Request:**
+
 ```json
 {
   "language": "python",
@@ -334,6 +348,7 @@ POST /api/execute
 ```
 
 **Response:**
+
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -347,12 +362,12 @@ POST /api/execute
 
 **Status values:**
 
-| Status | Meaning |
-|---|---|
-| `success` | Program exited with code 0 |
+| Status          | Meaning                         |
+| --------------- | ------------------------------- |
+| `success`       | Program exited with code 0      |
 | `compile_error` | Compilation failed (C++ / Java) |
-| `runtime_error` | Program crashed at runtime |
-| `timeout` | Exceeded 10 second limit |
+| `runtime_error` | Program crashed at runtime      |
+| `timeout`       | Exceeded 10 second limit        |
 
 ---
 
@@ -363,25 +378,48 @@ POST /api/execute/test
 ```
 
 **Request:**
+
 ```json
 {
   "language": "python",
   "code": "n = int(input())\nprint(n * 2)",
   "testCases": [
     { "input": "5", "expected": "10" },
-    { "input": "3", "expected": "6"  },
-    { "input": "0", "expected": "1"  }
+    { "input": "3", "expected": "6" },
+    { "input": "0", "expected": "1" }
   ]
 }
 ```
 
 **Response:**
+
 ```json
 {
   "results": [
-    { "index": 1, "input": "5", "expected": "10", "actual": "10", "passed": true,  "executionTime": 601 },
-    { "index": 2, "input": "3", "expected": "6",  "actual": "6",  "passed": true,  "executionTime": 589 },
-    { "index": 3, "input": "0", "expected": "1",  "actual": "0",  "passed": false, "executionTime": 574 }
+    {
+      "index": 1,
+      "input": "5",
+      "expected": "10",
+      "actual": "10",
+      "passed": true,
+      "executionTime": 601
+    },
+    {
+      "index": 2,
+      "input": "3",
+      "expected": "6",
+      "actual": "6",
+      "passed": true,
+      "executionTime": 589
+    },
+    {
+      "index": 3,
+      "input": "0",
+      "expected": "1",
+      "actual": "0",
+      "passed": false,
+      "executionTime": 574
+    }
   ],
   "passed": 2,
   "failed": 1,
@@ -404,22 +442,22 @@ GET /api/executions/:id      # Single execution by ID
 
 ## Security Model
 
-| Threat | Mitigation |
-|---|---|
-| Host filesystem access | Read-only bind mount — container cannot write to host |
-| Network exfiltration | `NetworkMode: none` — zero internet inside container |
-| Memory exhaustion | 128MB RAM hard limit enforced by Docker |
-| Infinite loops / forkbombs | 10s timeout — container killed with `SIGKILL` |
-| API abuse | 30 requests/minute rate limiting per IP |
-| Shell injection via stdin | stdin written to file, redirected with `<` — never shell-interpolated |
-| Container flooding | Bull queue caps at 5 simultaneous containers |
+| Threat                        | Mitigation                                                                                           |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Writes to the host filesystem | Read-only bind mount — container cannot write to the host; its own internal filesystem is unaffected |
+| Network exfiltration          | `NetworkMode: none` — zero network access inside the container                                       |
+| Memory exhaustion             | 128MB RAM hard limit enforced by Docker                                                              |
+| Infinite loops / forkbombs    | 10s timeout — container killed with `SIGKILL`                                                        |
+| API abuse                     | 30 requests/minute rate limiting per IP                                                              |
+| Shell injection via stdin     | stdin written to file, redirected with `<` — never shell-interpolated                                |
+| Container flooding            | Bull queue caps at 5 simultaneous containers                                                         |
 
 ---
 
 ## Known Limitations
 
 **Container startup adds ~500–900ms per execution**
-The system spins up a fresh Docker container for every submission. This is the safest isolation approach but the cold start dominates the latency profile. The architecture is compatible with a pre-warmed container pool — containers could be kept alive and reused — but that adds significant complexity that wasn't warranted here.
+The system spins up a fresh Docker container for every submission. This gives strong, simple isolation (each run is a throwaway container with no shared state), but the cold start dominates the latency profile. The architecture is compatible with a pre-warmed container pool — containers could be kept alive and reused — but that adds significant complexity that wasn't warranted here.
 
 **One file per submission**
 Each execution mounts a single source file. Projects that span multiple files aren't supported. Extending this would mean mounting a directory and adjusting the compile command — the Docker mount strategy already handles this pattern internally.
@@ -429,3 +467,18 @@ Bull supports running multiple worker processes across multiple machines with no
 
 **No user accounts**
 All executions are anonymous. User accounts would unlock per-user history, private share links, and finer-grained rate limiting.
+
+**No automated test suite**
+Correctness has been validated manually and via the k6 load tests above, but there's no unit/integration test suite yet. This is the next thing I'd add before treating this as more than a portfolio project.
+
+---
+
+## Future Improvements
+
+- Pre-warmed container pool to reduce cold-start latency.
+- CPU quotas in addition to memory limits.
+- Support for multi-file projects.
+- WebSocket-based execution status updates instead of polling.
+- Kubernetes deployment for horizontal worker scaling.
+- Automated unit/integration test suite and CI pipeline.
+- Stronger isolation option (e.g. gVisor or Firecracker) for untrusted-multi-tenant deployments.
