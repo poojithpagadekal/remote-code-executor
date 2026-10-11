@@ -27,7 +27,6 @@ export async function runJava(
     const status = getStatus(result.exitCode, result.stage);
     return { ...result, status, executionTime: Date.now() - startTime };
   } finally {
-    await new Promise((resolve) => setTimeout(resolve, 500));
     await fs.rm(dirpath, { recursive: true, force: true });
   }
 }
