@@ -41,12 +41,11 @@ interface RawContainerResult {
 
 async function runInContainer(dirId: string): Promise<RawContainerResult> {
   const sourceFile = "/code/Main.java";
-  const classPath = "/code";
   const className = "Main";
   const stdinFile = "/code/stdin.txt";
 
-  const compileCmd = `javac ${sourceFile}`;
-  const runCmd = `java -cp ${classPath} ${className} < ${stdinFile}`;
+  const compileCmd = `mkdir -p /tmp/out && javac -d /tmp/out ${sourceFile}`;
+  const runCmd = `java -cp /tmp/out ${className} < ${stdinFile}`;
 
   const hostTempPath = ENV.HOST_TEMP_PATH || path.join(process.cwd(), "temp");
   const sourcePath = `${hostTempPath}/${dirId}`;
@@ -60,12 +59,16 @@ async function runInContainer(dirId: string): Promise<RawContainerResult> {
           Type: "bind",
           Source: sourcePath,
           Target: "/code",
-          ReadOnly: false,
+          ReadOnly: true,
         },
       ],
       Memory: MAX_MEMORY_BYTES,
       NetworkMode: "none",
       AutoRemove: true,
+      CapDrop:["ALL"],
+      SecurityOpt:["no-new-privileges"],
+      MemorySwap:MAX_MEMORY_BYTES,
+      PidsLimit:200
     },
     AttachStdout: true,
     AttachStderr: true,
