@@ -60,6 +60,10 @@ async function runInContainer(
       Memory: MAX_MEMORY_BYTES,
       NetworkMode: "none",
       AutoRemove: true,
+      CapDrop: ["ALL"],
+      MemorySwap: MAX_MEMORY_BYTES,
+      PidsLimit: 100,
+      SecurityOpt: ["no-new-privileges"]
     },
     AttachStdout: true,
     AttachStderr: true,
@@ -95,7 +99,7 @@ async function runInContainer(
   const timer = createTimeout(container, EXECUTION_TIMEOUT_MS);
   try {
     const result = await Promise.race([container.wait(), timer.promise]);
-    if(timer.timedOut()){
+    if (timer.timedOut()) {
       throw new Error("Time limit exceeded");
     }
     return {
