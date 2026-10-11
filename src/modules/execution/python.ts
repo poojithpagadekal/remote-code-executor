@@ -5,6 +5,7 @@ import { EXECUTION_TIMEOUT_MS, MAX_MEMORY_BYTES } from "../../config/constants";
 import fs from "fs/promises";
 import path from "path";
 import { ENV } from "../../config/env";
+import { createTimeout } from "../../utils/timeout";
 
 const docker = new Docker();
 
@@ -91,12 +92,12 @@ async function runInContainer(
 
   await container.start();
 
+  const timer = createTimeout(container, EXECUTION_TIMEOUT_MS);
   try {
-    const result = await Promise.race([
-      container.wait(),
-      withTimeout(container, EXECUTION_TIMEOUT_MS),
-    ]);
-
+    const result = await Promise.race([container.wait(), timer.promise]);
+    if(timer.timedOut()){
+      throw new Error("Time limit exceeded");
+    }
     return {
       stdout: stdout.trim(),
       stderr: stderr.trim(),
@@ -111,19 +112,9 @@ async function runInContainer(
       };
     }
     throw err;
+  } finally {
+    timer.cancel();
   }
-}
-
-function withTimeout(
-  container: Docker.Container,
-  timeoutMs: number,
-): Promise<never> {
-  return new Promise((_, reject) => {
-    setTimeout(async () => {
-      await container.kill().catch(() => {});
-      reject(new Error("Time limit exceeded"));
-    }, timeoutMs);
-  });
 }
 
 function getStatus(exitCode: number): "success" | "runtime_error" | "timeout" {
