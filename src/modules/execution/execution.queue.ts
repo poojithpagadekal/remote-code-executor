@@ -17,6 +17,7 @@ export class QueueFullError extends Error {
 
 const executionQueue = new Bull<ExecutionJob>("execution", {
   redis: ENV.REDIS_URL,
+  defaultJobOptions: { removeOnComplete: true, removeOnFail: true },
 });
 
 export async function assertQueueHasRoom(jobsToAdd = 1): Promise<void> {

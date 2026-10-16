@@ -4,12 +4,20 @@ interface CaseEditorProps {
   input: string;
   expected: string;
   actualOutput?: string;
+  status?: string;
+  stderr?: string;
   showActual: boolean;
   canDelete: boolean;
   activeIdx: number;
   onUpdate: (field: "input" | "expected", value: string) => void;
   onRemove: () => void;
 }
+
+const STATUS_LABELS: Record<string, string> = {
+  compile_error: "Compile error",
+  runtime_error: "Runtime error",
+  timeout: "Time limit exceeded",
+};
 
 const taStyle = {
   backgroundColor: "#313335",
@@ -28,6 +36,8 @@ export default function CaseEditor({
   input,
   expected,
   actualOutput,
+  status,
+  stderr,
   showActual,
   canDelete,
   onUpdate,
@@ -68,11 +78,21 @@ export default function CaseEditor({
       </div>
 
       {showActual && (
-        <CodeBlock
-          label="Actual Output"
-          content={actualOutput || "(empty)"}
-          variant="stderr"
-        />
+        <>
+          {status && status !== "success" && (
+            <p className="text-xs font-semibold" style={{ color: "#bc3f3c" }}>
+              {STATUS_LABELS[status] ?? status}
+            </p>
+          )}
+          <CodeBlock
+            label="Actual Output"
+            content={actualOutput || "(empty)"}
+            variant="stderr"
+          />
+          {stderr && (
+            <CodeBlock label="Error" content={stderr} variant="stderr" />
+          )}
+        </>
       )}
 
       {canDelete && (

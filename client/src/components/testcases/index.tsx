@@ -54,6 +54,8 @@ export default function TestCasesPanel({
           input={tc?.input || ""}
           expected={tc?.expected || ""}
           actualOutput={tcResult?.actual}
+          status={tcResult?.status}
+          stderr={tcResult?.stderr}
           showActual={!!tcResult && !tcResult.passed}
           canDelete={testCases.length > 1}
           activeIdx={activeTestCase}

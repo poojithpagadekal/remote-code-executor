@@ -47,6 +47,7 @@ export async function runTestCases(
       actual,
       passed,
       status: result.status,
+      stderr:result.stderr.slice(0,2000),
       executionTime: result.executionTime,
     };
   });

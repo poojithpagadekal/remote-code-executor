@@ -19,7 +19,8 @@ export interface TestCaseResult {
   expected: string;
   actual: string;
   passed: boolean;
-  status: string;
+  status: ExecutionResult['status'];
+  stderr:string;
   executionTime: number;
 }
 
