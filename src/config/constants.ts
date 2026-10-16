@@ -4,3 +4,4 @@ export const MAX_CONCURRENT_JOBS = 5;
 export const MAX_CODE_LENGTH = 10000;
 export const SUPPORTED_LANGUAGES = ["python", "cpp", "java"];
 export const MAX_TEST_CASES = 10;
+export const MAX_QUEUE_DEPTH = 15;

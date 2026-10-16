@@ -11,9 +11,9 @@ const app: Application = express();
 
 const limiter = ratelimit({ windowMs: 60 * 1000, max: 30 });
 
+app.use(cors({ origin: ENV.CORS_ORIGIN || "http://localhost:5173" }));
 app.use(limiter);
 app.use(express.json());
-app.use(cors({ origin: ENV.CORS_ORIGIN || "http://localhost:5173" }));
 app.get("/", (_req: Request, res: Response) => {
   res.json({ status: "ok", message: "Remote Code Executor is running" });
 });

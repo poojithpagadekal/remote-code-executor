@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { v4 as uuidv4 } from "uuid";
-import executionQueue from "./execution.queue";
+import executionQueue, { assertQueueHasRoom } from "./execution.queue";
 import { saveExecution } from "../history/history.service";
 import logger from "../../config/logger";
 import {
@@ -56,7 +56,7 @@ export async function executeCode(
       { language: trimmedLanguage, codeLength: trimmedCode.length },
       "Execution request received",
     );
-
+    await assertQueueHasRoom();
     const job = await executionQueue.add({
       language: trimmedLanguage,
       code: trimmedCode,
@@ -116,6 +116,7 @@ export async function testCode(
 
     if (!SUPPORTED_LANGUAGES.includes(trimmedLanguage)) {
       res.status(400).json({ error: "Language not supported" });
+      return;
     }
 
     if (trimmedCode.length === 0) {
@@ -151,7 +152,10 @@ export async function testCode(
       }
     }
 
-    logger.info({ language: trimmedCode, testCaseCount: testCases.length });
+    
+  await assertQueueHasRoom(testCases.length);
+
+    logger.info({ language: trimmedLanguage, testCaseCount: testCases.length });
     const result = await runTestCases(
       trimmedLanguage,
       trimmedCode,
