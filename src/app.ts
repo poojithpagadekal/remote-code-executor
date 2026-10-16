@@ -3,7 +3,6 @@ import cors from "cors";
 import { ENV } from "./config/env";
 import ratelimit from "express-rate-limit";
 import { errorHandler } from "./middleware/errorHandler";
-import "./modules/execution/execution.worker";
 import executeRoute from "./modules/execution/execution.routes";
 import historyRoute from "./modules/history/history.routes";
 

@@ -10,7 +10,15 @@ services:
       - "3000:3000"
     environment:
       - REDIS_URL=redis://redis:6379
-      - HOST_TEMP_PATH=${HOST_TEMP_PATH}
+    depends_on:
+      - redis
+
+  worker:
+    build: .
+    command: ["node", "dist/worker.js"]
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - HOST_TEMP_PATH=${HOST_TEMP_PATH:?Set HOST_TEMP_PATH in your .env file}
     depends_on:
       - redis
     volumes:
